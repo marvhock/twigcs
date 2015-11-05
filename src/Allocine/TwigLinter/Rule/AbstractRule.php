@@ -38,14 +38,4 @@ class AbstractRule
     {
         $this->violations[] = new Violation($filename, $line, $reason, $this->severity);
     }
-
-    /**
-     * @param integer $amount
-     */
-    public function advance(\Twig_TokenStream $tokens, $amount)
-    {
-        for ($i=0; $i<$amount; $i++) {
-            $tokens->next();
-        }
-    }
 }

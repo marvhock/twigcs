@@ -2,6 +2,7 @@
 
 namespace Allocine\TwigLinter\Rule;
 
+use Allocine\TwigLinter\Helper\StreamScanner;
 use Allocine\TwigLinter\Lexer;
 use Allocine\TwigLinter\Validator\Violation;
 
@@ -14,17 +15,14 @@ class LowerCaseVariable extends AbstractRule implements RuleInterface
     {
         $this->reset();
 
-        while (!$tokens->isEOF()) {
-            $token = $tokens->getCurrent();
-
-            if ($token->getType() === \Twig_Token::NAME_TYPE && !ctype_lower($token->getValue())) {
-                if ($tokens->look(Lexer::PREVIOUS_TOKEN)->getType() === Lexer::WHITESPACE_TYPE && $tokens->look(-2)->getValue() === 'set') {
-                    $this->addViolation($tokens->getFilename(), $token->getLine(), sprintf('The "%s" variable should be in lower case (use _ as a separator).', $token->getValue()));
-                }
+        $scanner = new StreamScanner();
+        $scanner->addSequence(['set', '#@NAME', '='], function (array $matches) use ($tokens) {
+            if (!ctype_lower($matches[0]->getValue())) {
+                $this->addViolation($tokens->getFilename(), $matches[0]->getLine(), sprintf('The "%s" variable should be in lower case (use _ as a separator).', $matches[0]->getValue()));
             }
+        });
 
-            $tokens->next();
-        }
+        $scanner->scan($tokens);
 
         return $this->violations;
     }

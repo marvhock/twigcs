@@ -2,11 +2,17 @@
 
 namespace Allocine\TwigLinter\Rule;
 
+use Allocine\TwigLinter\Helper\StreamScanner;
 use Allocine\TwigLinter\Helper\TokenSequence;
 use Allocine\TwigLinter\Lexer;
 
 class UnusedMacro extends AbstractRule implements RuleInterface
 {
+    /**
+     * @var integer
+     */
+    private $macros;
+
     /**
      * {@inheritdoc}
      */
@@ -14,41 +20,46 @@ class UnusedMacro extends AbstractRule implements RuleInterface
     {
         $this->reset();
 
-        $macros = [];
+        $scanner = new StreamScanner();
+        $scanner->addSequence(['import', '@STRING', 'as', ['#@NAME', ','], '#@NAME'], [$this, 'matchDeclarations']);
+        $scanner->addSequence(['import', '@STRING', 'as', '#@NAME'], [$this, 'matchDeclarations']);
+        $scanner->addSequence(['#@NAME'], [$this, 'matchUsages']);
 
-        $importMany   = new TokenSequence(['import', '@STRING', 'as', ['#@NAME', ','], '#@NAME']);
-        $importSingle = new TokenSequence(['import', '@STRING', 'as', '#@NAME']);
-        $call         = new TokenSequence(['#@NAME']);
+        $scanner->scan($tokens);
 
-        while (!$tokens->isEOF()) {
-            $token = $tokens->getCurrent();
-
-            if ($importMany->match($tokens)) {
-                foreach ($importMany->getCaptures() as $macro) {
-                    $macros[$macro->getValue()] = $macro->getLine();
-                }
-                $this->advance($tokens, $importMany->getRelativeCursor());
-            } elseif ($importSingle->match($tokens)) {
-                $macro = $importSingle->getCaptures()[0];
-                $macros[$macro->getValue()] = $macro->getLine();
-                $this->advance($tokens, $importSingle->getRelativeCursor());
-            } elseif ($call->match($tokens)) {
-                $match = $call->getCaptures()[0];
-                unset($macros[$match->getValue()]);
-            }
-
-            $tokens->next();
-        }
-
-
-        foreach ($macros as $name => $line) {
-            $this->addViolation(
-                $tokens->getFilename(),
-                $line,
-                sprintf('Unused macro "%s".', $name)
-            );
+        foreach ($this->macros as $name => $line) {
+            $this->addViolation($tokens->getFilename(), $line, sprintf('Unused macro "%s".', $name));
         }
 
         return $this->violations;
+    }
+
+    /**
+     * @param \Twig_Token[] $matches
+     */
+    public function matchDeclarations(array $matches)
+    {
+        foreach ($matches as $macro) {
+            $this->macros[$macro->getValue()] = $macro->getLine();
+        }
+    }
+
+    /**
+     * @param \Twig_Token[] $matches
+     */
+    public function matchUsages(array $matches)
+    {
+        $match = $matches[0];
+        unset($this->macros[$match->getValue()]);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function reset()
+    {
+        $this->macros = [];
+
+        parent::reset();
     }
 }
