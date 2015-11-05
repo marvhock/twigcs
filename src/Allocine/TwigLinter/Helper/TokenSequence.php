@@ -9,17 +9,19 @@ class TokenSequence
     /**
      * @var array
      */
-    protected $sequence;
+    private $sequence;
 
     /**
      * @var \Twig_token[]
      */
-    protected $captures;
+    private $captures;
 
     /**
      * @var integer
      */
-    protected $cursor;
+    private $cursor;
+
+    private $relativeCursor;
 
     /**
      * @param array $sequence
@@ -28,6 +30,14 @@ class TokenSequence
     {
         $this->sequence = $sequence;
         $this->captures = [];
+    }
+
+    /**
+     * @return integer
+     */
+    public function getRelativeCursor()
+    {
+        return $this->relativeCursor;
     }
 
     /**
@@ -56,6 +66,7 @@ class TokenSequence
     {
         $this->captures = [];
         $this->cursor = $offset;
+        $this->relativeCursor = 0;
 
         $i = $offset;
         $j = 0;
@@ -68,17 +79,19 @@ class TokenSequence
                 while ($subSequence->match($tokens, $i)) {
                     $this->addCaptures($subSequence->getCaptures());
                     $i = $subSequence->cursor;
+                    $this->relativeCursor += $subSequence->getRelativeCursor();
                 }
                 $state = 'pass';
             } else {
                 $state = $this->test($this->sequence[$j], $tokens->look($i));
+                $this->relativeCursor++;
+                $i++;
             }
 
             if ($state !== 'skip') {
                 $j++;
             }
 
-            $i++;
         }
 
         $this->cursor = $i;

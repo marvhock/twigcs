@@ -2,6 +2,7 @@
 
 namespace Allocine\TwigLinter\Rule;
 
+use Allocine\TwigLinter\Helper\TokenSequence;
 use Allocine\TwigLinter\Lexer;
 
 class UnusedMacro extends AbstractRule implements RuleInterface
@@ -15,26 +16,25 @@ class UnusedMacro extends AbstractRule implements RuleInterface
 
         $macros = [];
 
+        $importMany   = new TokenSequence(['import', '@STRING', 'as', ['#@NAME', ','], '#@NAME']);
+        $importSingle = new TokenSequence(['import', '@STRING', 'as', '#@NAME']);
+        $call         = new TokenSequence(['#@NAME']);
+
         while (!$tokens->isEOF()) {
             $token = $tokens->getCurrent();
 
-            if ($token->getType() === \Twig_Token::NAME_TYPE && $token->getValue() === 'import') {
-                while ($tokens->getCurrent()->getValue() !== 'as') {
-                    $tokens->next();
+            if ($importMany->match($tokens)) {
+                foreach ($importMany->getCaptures() as $macro) {
+                    $macros[$macro->getValue()] = $macro->getLine();
                 }
-
-                $tokens->next();
-
-                while (in_array($tokens->getCurrent()->getType(), [\Twig_Token::NAME_TYPE, \Twig_Token::PUNCTUATION_TYPE, Lexer::WHITESPACE_TYPE])) {
-                    $next = $tokens->getCurrent();
-                    if ($next->getType() === \Twig_Token::NAME_TYPE) {
-                        $macros[$next->getValue()] = $next->getLine();
-                    }
-
-                    $tokens->next();
-                }
-            } elseif ($token->getType() === \Twig_Token::NAME_TYPE && array_key_exists($token->getValue(), $macros)) {
-                unset($macros[$token->getValue()]);
+                $this->advance($tokens, $importMany->getRelativeCursor());
+            } elseif ($importSingle->match($tokens)) {
+                $macro = $importSingle->getCaptures()[0];
+                $macros[$macro->getValue()] = $macro->getLine();
+                $this->advance($tokens, $importSingle->getRelativeCursor());
+            } elseif ($call->match($tokens)) {
+                $match = $call->getCaptures()[0];
+                unset($macros[$match->getValue()]);
             }
 
             $tokens->next();
@@ -44,7 +44,7 @@ class UnusedMacro extends AbstractRule implements RuleInterface
         foreach ($macros as $name => $line) {
             $this->addViolation(
                 $tokens->getFilename(),
-                $token->getLine(),
+                $line,
                 sprintf('Unused macro "%s".', $name)
             );
         }

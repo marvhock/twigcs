@@ -2,6 +2,7 @@
 
 namespace Allocine\TwigLinter\Rule;
 
+use Allocine\TwigLinter\Helper\TokenSequence;
 use Allocine\TwigLinter\Lexer;
 
 class UnusedVariable extends AbstractRule implements RuleInterface
@@ -15,15 +16,17 @@ class UnusedVariable extends AbstractRule implements RuleInterface
 
         $variables = [];
 
-        while (!$tokens->isEOF()) {
-            $token = $tokens->getCurrent();
+        $declaration = new TokenSequence(['set', '#@NAME', '=']);
+        $call        = new TokenSequence(['#@NAME']);
 
-            if ($token->getType() === \Twig_Token::NAME_TYPE) {
-                if ($tokens->look(Lexer::PREVIOUS_TOKEN)->getType() === Lexer::WHITESPACE_TYPE && $tokens->look(-2)->getValue() === 'set') {
-                    $variables[$token->getValue()] = $token->getLine();
-                } else {
-                    unset($variables[$token->getValue()]);
-                }
+        while (!$tokens->isEOF()) {
+            if ($declaration->match($tokens)) {
+                $match = $declaration->getCaptures()[0];
+                $variables[$match->getValue()] = $match->getLine();
+                $this->advance($tokens, 3);
+            } elseif ($call->match($tokens)) {
+                $match = $call->getCaptures()[0];
+                unset($variables[$match->getValue()]);
             }
 
             $tokens->next();
@@ -32,7 +35,7 @@ class UnusedVariable extends AbstractRule implements RuleInterface
         foreach ($variables as $name => $line) {
             $this->addViolation(
                 $tokens->getFilename(),
-                $token->getLine(),
+                $line,
                 sprintf('Unused variable "%s".', $name)
             );
         }
